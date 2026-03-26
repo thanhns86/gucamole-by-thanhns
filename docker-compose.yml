@@ -36,6 +36,7 @@ services:
   # ============================================================
   guacamole-init:
     image: guacamole/guacamole:latest
+    user: root
     entrypoint: ["/bin/sh", "-c", "/opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql 2>/init/error.log || /opt/guacamole/bin/initdb.sh --postgresql > /init/initdb.sql 2>/init/error.log"]
     volumes:
       - guac_db_init:/init
