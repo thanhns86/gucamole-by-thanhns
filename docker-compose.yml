@@ -19,8 +19,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-guacamole_password}
       POSTGRES_DB: ${POSTGRES_DB:-guacamole_db}
     volumes:
-      - guac_db_data:/var/lib/postgresql/data
-      - guac_db_init:/docker-entrypoint-initdb.d
+      - guac_db_data_v2:/var/lib/postgresql/data
+      - guac_db_init_v2:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-guacamole} -d ${POSTGRES_DB:-guacamole_db}"]
       interval: 10s
@@ -36,9 +36,10 @@ services:
   # ============================================================
   guacamole-init:
     image: guacamole/guacamole:latest
+    user: root
     entrypoint: ["/bin/sh", "-c", "/opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql 2>/init/error.log || /opt/guacamole/bin/initdb.sh --postgresql > /init/initdb.sql 2>/init/error.log"]
     volumes:
-      - guac_db_init:/init
+      - guac_db_init_v2:/init
     restart: "no"
     networks:
       - dokploy-network
@@ -65,6 +66,7 @@ services:
       POSTGRESQL_USER: ${POSTGRES_USER:-guacamole}
       POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:-guacamole_password}
       POSTGRESQL_AUTO_CREATE_ACCOUNTS: "true"
+      WEBAPP_CONTEXT: ROOT
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.guacamole.rule=Host(`guacamole.monitormb.xyz`)"
@@ -80,5 +82,5 @@ networks:
     external: true
 
 volumes:
-  guac_db_data:
-  guac_db_init:
+  guac_db_data_v2:
+  guac_db_init_v2:
