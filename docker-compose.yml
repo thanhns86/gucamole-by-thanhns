@@ -25,7 +25,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-guacamole} -d ${POSTGRES_DB:-guacamole_db}"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 10l
       start_period: 30s
     networks:
       - dokploy-network
@@ -36,13 +36,7 @@ services:
   # ============================================================
   guacamole-init:
     image: guacamole/guacamole:latest
-    entrypoint: >
-      /bin/sh -c "
-        echo '>>> Generating Guacamole SQL schema...' &&
-        /opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql &&
-        echo '>>> Schema file generated at /init/initdb.sql' &&
-        echo '>>> Done. This container will now exit.'
-      "
+    entrypoint: ["/bin/sh", "-c", "/opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql 2>/init/error.log || /opt/guacamole/bin/initdb.sh --postgresql > /init/initdb.sql 2>/init/error.log"]
     volumes:
       - guac_db_init:/init
     restart: "no"
