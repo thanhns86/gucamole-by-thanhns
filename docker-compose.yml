@@ -1,0 +1,90 @@
+services:
+  # ============================================================
+  # 1. GUACD - Guacamole Daemon (proxy for remote connections)
+  # ============================================================
+  guacd:
+    image: guacamole/guacd:latest
+    restart: always
+    networks:
+      - dokploy-network
+
+  # ============================================================
+  # 2. PostgreSQL Database
+  # ============================================================
+  guacamole-db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-guacamole}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-guacamole_password}
+      POSTGRES_DB: ${POSTGRES_DB:-guacamole_db}
+    volumes:
+      - guac_db_data:/var/lib/postgresql/data
+      - guac_db_init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-guacamole} -d ${POSTGRES_DB:-guacamole_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - dokploy-network
+
+  # ============================================================
+  # 3. Init container - Generate SQL schema then import to DB
+  #    Chạy 1 lần rồi exit. Guacamole sẽ chỉ start sau khi nó xong.
+  # ============================================================
+  guacamole-init:
+    image: guacamole/guacamole:latest
+    entrypoint: >
+      /bin/sh -c "
+        echo '>>> Generating Guacamole SQL schema...' &&
+        /opt/guacamole/bin/initdb.sh --postgresql > /init/initdb.sql &&
+        echo '>>> Schema file generated at /init/initdb.sql' &&
+        echo '>>> Done. This container will now exit.'
+      "
+    volumes:
+      - guac_db_init:/init
+    restart: "no"
+    networks:
+      - dokploy-network
+
+  # ============================================================
+  # 4. Guacamole Web App
+  # ============================================================
+  guacamole:
+    image: guacamole/guacamole:latest
+    restart: always
+    depends_on:
+      guacamole-db:
+        condition: service_healthy
+      guacamole-init:
+        condition: service_completed_successfully
+      guacd:
+        condition: service_started
+    environment:
+      GUACD_HOSTNAME: guacd
+      GUACD_PORT: "4822"
+      POSTGRESQL_HOSTNAME: guacamole-db
+      POSTGRESQL_PORT: "5432"
+      POSTGRESQL_DATABASE: ${POSTGRES_DB:-guacamole_db}
+      POSTGRESQL_USER: ${POSTGRES_USER:-guacamole}
+      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:-guacamole_password}
+      POSTGRESQL_AUTO_CREATE_ACCOUNTS: "true"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.guacamole.rule=Host(`guacamole.monitormb.xyz`)"
+      - "traefik.http.routers.guacamole.entrypoints=websecure"
+      - "traefik.http.routers.guacamole.tls=true"
+      - "traefik.http.routers.guacamole.tls.certresolver=letsencrypt"
+      - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  guac_db_data:
+  guac_db_init:
