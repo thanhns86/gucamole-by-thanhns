@@ -39,7 +39,7 @@ services:
     entrypoint: >
       /bin/sh -c "
         echo '>>> Generating Guacamole SQL schema...' &&
-        /opt/guacamole/bin/initdb.sh --postgresql > /init/initdb.sql &&
+        /opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql &&
         echo '>>> Schema file generated at /init/initdb.sql' &&
         echo '>>> Done. This container will now exit.'
       "
