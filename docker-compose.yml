@@ -66,6 +66,7 @@ services:
       POSTGRESQL_USER: ${POSTGRES_USER:-guacamole}
       POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:-guacamole_password}
       POSTGRESQL_AUTO_CREATE_ACCOUNTS: "true"
+      WEBAPP_CONTEXT: ROOT
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.guacamole.rule=Host(`guacamole.monitormb.xyz`)"
