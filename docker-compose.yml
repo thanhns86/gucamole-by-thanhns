@@ -82,5 +82,5 @@ networks:
     external: true
 
 volumes:
-  guac_db_data:
-  guac_db_init:
+  guac_db_data_v2:
+  guac_db_init_v2:
