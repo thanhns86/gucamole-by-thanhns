@@ -1,9 +1,17 @@
+##############################################################
+# Apache Guacamole - All-in-one Docker Compose
+# Không cần chạy lệnh ngoài, tự động init DB hoàn toàn
+# Domain: remote.matbaohosting.com
+##############################################################
+
 services:
+
   # ============================================================
-  # 1. GUACD - Guacamole Daemon (proxy for remote connections)
+  # 1. GUACD - Guacamole Daemon
   # ============================================================
   guacd:
     image: guacamole/guacd:latest
+    container_name: guacd
     restart: always
     networks:
       - dokploy-network
@@ -13,34 +21,49 @@ services:
   # ============================================================
   guacamole-db:
     image: postgres:15
+    container_name: guacamole-db
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-guacamole}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-guacamole_password}
       POSTGRES_DB: ${POSTGRES_DB:-guacamole_db}
     volumes:
-      - guac_db_data_v2:/var/lib/postgresql/data
-      - guac_db_init_v2:/docker-entrypoint-initdb.d
+      - guac_db_data:/var/lib/postgresql/data
+      - guac_db_init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-guacamole} -d ${POSTGRES_DB:-guacamole_db}"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 15
+      start_period: 40s
     networks:
       - dokploy-network
 
   # ============================================================
-  # 3. Init container - Generate SQL schema then import to DB
-  #    Chạy 1 lần rồi exit. Guacamole sẽ chỉ start sau khi nó xong.
+  # 3. Init container
+  #    - Generate initdb.sql từ image Guacamole
+  #    - Chỉ ghi vào volume nếu file chưa tồn tại (idempotent)
   # ============================================================
   guacamole-init:
     image: guacamole/guacamole:latest
+    container_name: guacamole-init
     user: root
-    entrypoint: ["/bin/sh", "-c", "/opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql 2>/init/error.log || /opt/guacamole/bin/initdb.sh --postgresql > /init/initdb.sql 2>/init/error.log"]
-    volumes:
-      - guac_db_init_v2:/init
     restart: "no"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        SQL_FILE=/init/initdb.sql
+        if [ ! -f "$SQL_FILE" ]; then
+          echo "[init] Generating initdb.sql ..."
+          /opt/guacamole/bin/initdb.sh --postgresql > "$SQL_FILE"
+          echo "[init] Done. SQL file created."
+        else
+          echo "[init] initdb.sql already exists, skipping."
+        fi
+    volumes:
+      - guac_db_init:/init
     networks:
       - dokploy-network
 
@@ -49,6 +72,7 @@ services:
   # ============================================================
   guacamole:
     image: guacamole/guacamole:latest
+    container_name: guacamole
     restart: always
     depends_on:
       guacamole-db:
@@ -67,13 +91,21 @@ services:
       POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:-guacamole_password}
       POSTGRESQL_AUTO_CREATE_ACCOUNTS: "true"
       WEBAPP_CONTEXT: ROOT
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.guacamole.rule=Host(`remote.matbaohosting.com`)"
-      - "traefik.http.routers.guacamole.entrypoints=websecure"
-      - "traefik.http.routers.guacamole.tls=true"
-      - "traefik.http.routers.guacamole.tls.certresolver=letsencrypt"
-      - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
+      - "traefik.http.routers.guacamole-app.rule=Host(`remote.matbaohosting.com`)"
+      - "traefik.http.routers.guacamole-app.entrypoints=websecure"
+      - "traefik.http.routers.guacamole-app.tls=true"
+      - "traefik.http.routers.guacamole-app.tls.certresolver=letsencrypt"
+      - "traefik.http.services.guacamole-app.loadbalancer.server.port=8080"
+      - "traefik.http.services.guacamole-app.loadbalancer.healthcheck.path=/"
+      - "traefik.http.services.guacamole-app.loadbalancer.healthcheck.interval=30s"
     networks:
       - dokploy-network
 
@@ -82,5 +114,5 @@ networks:
     external: true
 
 volumes:
-  guac_db_data_v2:
-  guac_db_init_v2:
+  guac_db_data:
+  guac_db_init:
