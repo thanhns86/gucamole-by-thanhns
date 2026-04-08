@@ -1,6 +1,6 @@
 ##############################################################
 # Apache Guacamole - All-in-one Docker Compose
-# Không cần chạy lệnh ngoài, tự động init DB hoàn toàn
+# Tự động init DB hoàn toàn - Đã sửa lỗi exit 2 & Directory
 # Domain: remote.matbaohosting.com
 ##############################################################
 
@@ -41,8 +41,6 @@ services:
 
   # ============================================================
   # 3. Init container
-  #    - Generate initdb.sql từ image Guacamole
-  #    - Chỉ ghi vào volume nếu file chưa tồn tại (idempotent)
   # ============================================================
   guacamole-init:
     image: guacamole/guacamole:latest
@@ -54,10 +52,11 @@ services:
       - -c
       - |
         set -e
+        mkdir -p /init
         SQL_FILE=/init/initdb.sql
         if [ ! -f "$SQL_FILE" ]; then
           echo "[init] Generating initdb.sql ..."
-          /opt/guacamole/bin/initdb.sh --postgresql > "$SQL_FILE"
+          /opt/guacamole/bin/initdb.sh --postgres > "$SQL_FILE"
           echo "[init] Done. SQL file created."
         else
           echo "[init] initdb.sql already exists, skipping."
@@ -104,8 +103,6 @@ services:
       - "traefik.http.routers.guacamole-app.tls=true"
       - "traefik.http.routers.guacamole-app.tls.certresolver=letsencrypt"
       - "traefik.http.services.guacamole-app.loadbalancer.server.port=8080"
-      - "traefik.http.services.guacamole-app.loadbalancer.healthcheck.path=/"
-      - "traefik.http.services.guacamole-app.loadbalancer.healthcheck.interval=30s"
     networks:
       - dokploy-network
 
