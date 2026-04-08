@@ -1,22 +1,19 @@
 services:
   # ============================================================
-  # 1. INIT DB: Tự sinh file SQL ngay khi khởi động
+  # 1. INIT DB: Sử dụng định dạng entrypoint an toàn nhất
   # ============================================================
   guacamole-init:
-    image: guacamole/guacamole:1.6.0
+    image: guacamole/guacamole:latest
     container_name: guac_init_script
-    # Sử dụng command thay vì entrypoint để ổn định hơn trên Dokploy
-    command: >
-      sh -c "/opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql && 
-             echo 'SUCCESS: SQL file generated' &&
-             ls -l /init/initdb.sql"
+    # Bọc lệnh trong sh -c và dùng dấu nháy đơn để tránh lỗi biên dịch cú pháp
+    entrypoint: /bin/sh -c "/opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql"
     volumes:
       - guac_db_init_shared:/init
     networks:
       - dokploy-network
 
   # ============================================================
-  # 2. DATABASE: Chờ Init xong mới chạy
+  # 2. DATABASE
   # ============================================================
   postgres:
     image: postgres:15-alpine
@@ -43,14 +40,14 @@ services:
   # 3. GUACD & WEB APP
   # ============================================================
   guacd:
-    image: guacamole/guacd:1.6.0
+    image: guacamole/guacd:latest
     container_name: guacd_compose
     restart: always
     networks:
       - dokploy-network
 
   guacamole:
-    image: guacamole/guacamole:1.6.0
+    image: guacamole/guacamole:latest
     container_name: guacamole_main
     restart: always
     depends_on:
@@ -77,5 +74,5 @@ networks:
     external: true
 
 volumes:
-  guac_db_data:         # Nơi lưu data thực tế của Postgres
-  guac_db_init_shared:  # Volume trung gian để truyền file SQL
+  guac_db_data:
+  guac_db_init_shared:
