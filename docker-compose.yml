@@ -40,7 +40,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      WEBAPP_CONTEXT=ROOT  # Thêm dòng này để chạy tại trang chủ
+      WEBAPP_CONTEXT: ROOT  # Thêm dòng này để chạy tại trang chủ
       GUACD_HOSTNAME: guacd_compose
       POSTGRESQL_DATABASE: guacamole_db
       POSTGRESQL_HOSTNAME: postgres_guacamole
