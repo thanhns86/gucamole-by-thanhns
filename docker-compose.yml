@@ -1,14 +1,10 @@
 ##############################################################
 # Apache Guacamole - All-in-one Docker Compose
-# Tự động init DB hoàn toàn - Đã sửa lỗi exit 2 & Directory
-# Domain: remote.matbaohosting.com
+# Final Fix: Đã sửa lại Entrypoint Format để tránh lỗi Exit 2
 ##############################################################
 
 services:
 
-  # ============================================================
-  # 1. GUACD - Guacamole Daemon
-  # ============================================================
   guacd:
     image: guacamole/guacd:latest
     container_name: guacd
@@ -16,9 +12,6 @@ services:
     networks:
       - dokploy-network
 
-  # ============================================================
-  # 2. PostgreSQL Database
-  # ============================================================
   guacamole-db:
     image: postgres:15
     container_name: guacamole-db
@@ -39,36 +32,18 @@ services:
     networks:
       - dokploy-network
 
-  # ============================================================
-  # 3. Init container
-  # ============================================================
   guacamole-init:
     image: guacamole/guacamole:latest
     container_name: guacamole-init
     user: root
     restart: "no"
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        set -e
-        mkdir -p /init
-        SQL_FILE=/init/initdb.sql
-        if [ ! -f "$SQL_FILE" ]; then
-          echo "[init] Generating initdb.sql ..."
-          /opt/guacamole/bin/initdb.sh --postgres > "$SQL_FILE"
-          echo "[init] Done. SQL file created."
-        else
-          echo "[init] initdb.sql already exists, skipping."
-        fi
+    # SỬA TẠI ĐÂY: Chuyển sang dạng command string để tránh lỗi cú pháp shell
+    entrypoint: /bin/sh -c "mkdir -p /init && if [ ! -f /init/initdb.sql ]; then /opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql; echo '[init] SQL created'; else echo '[init] Exists'; fi"
     volumes:
       - guac_db_init:/init
     networks:
       - dokploy-network
 
-  # ============================================================
-  # 4. Guacamole Web App
-  # ============================================================
   guacamole:
     image: guacamole/guacamole:latest
     container_name: guacamole
