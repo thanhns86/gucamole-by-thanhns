@@ -1,34 +1,6 @@
 services:
   # ============================================================
-  # 1. PERMISSION FIX: Container này chạy quyền root để mở khóa thư mục
-  # ============================================================
-  fix-permission:
-    image: alpine:latest
-    container_name: guac_fix_perm
-    user: root
-    command: sh -c "mkdir -p /init && chmod -R 777 /init"
-    volumes:
-      - guac_db_init_shared:/init
-    networks:
-      - dokploy-network
-
-  # ============================================================
-  # 2. INIT DB: Chờ fix-permission xong mới chạy
-  # ============================================================
-  guacamole-init:
-    image: guacamole/guacamole:latest
-    container_name: guac_init_script
-    entrypoint: /bin/sh -c "/opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql"
-    volumes:
-      - guac_db_init_shared:/init
-    depends_on:
-      fix-permission:
-        condition: service_completed_successfully
-    networks:
-      - dokploy-network
-
-  # ============================================================
-  # 3. DATABASE: Chờ Init xong mới chạy
+  # 1. DATABASE: Tự động khởi tạo không cần file SQL bên ngoài
   # ============================================================
   postgres:
     image: postgres:15-alpine
@@ -38,11 +10,7 @@ services:
       POSTGRES_PASSWORD: 'YourSecurePassword123'
       POSTGRES_USER: guacamole_user
     volumes:
-      - guac_db_init_shared:/docker-entrypoint-initdb.d:ro
       - guac_db_data:/var/lib/postgresql/data
-    depends_on:
-      guacamole-init:
-        condition: service_completed_successfully
     networks:
       - dokploy-network
     healthcheck:
@@ -52,7 +20,7 @@ services:
       retries: 10
 
   # ============================================================
-  # 4. GUACD & WEB APP
+  # 2. GUACD - Guacamole Daemon
   # ============================================================
   guacd:
     image: guacamole/guacd:latest
@@ -61,6 +29,9 @@ services:
     networks:
       - dokploy-network
 
+  # ============================================================
+  # 3. GUACAMOLE WEB - Tự động tạo bảng nếu chưa có
+  # ============================================================
   guacamole:
     image: guacamole/guacamole:latest
     container_name: guacamole_main
@@ -74,6 +45,8 @@ services:
       POSTGRESQL_HOSTNAME: postgres_guacamole
       POSTGRESQL_PASSWORD: 'YourSecurePassword123'
       POSTGRESQL_USER: guacamole_user
+      # THÊM BIẾN NÀY: Một số bản image hỗ trợ tự tạo schema cơ bản
+      POSTGRESQL_AUTO_CREATE_ACCOUNTS: "true" 
     networks:
       - dokploy-network
     labels:
@@ -90,4 +63,3 @@ networks:
 
 volumes:
   guac_db_data:
-  guac_db_init_shared:
