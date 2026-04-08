@@ -69,7 +69,7 @@ services:
       WEBAPP_CONTEXT: ROOT
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.guacamole.rule=Host(`guacamole.monitormb.xyz`)"
+      - "traefik.http.routers.guacamole.rule=Host(`remote.matbaohosting.com`)"
       - "traefik.http.routers.guacamole.entrypoints=websecure"
       - "traefik.http.routers.guacamole.tls=true"
       - "traefik.http.routers.guacamole.tls.certresolver=letsencrypt"
