@@ -1,90 +1,81 @@
-##############################################################
-# Apache Guacamole - All-in-one Docker Compose
-# Final Fix: Đã sửa lại Entrypoint Format để tránh lỗi Exit 2
-##############################################################
-
 services:
-
-  guacd:
-    image: guacamole/guacd:latest
-    container_name: guacd
-    restart: always
-    networks:
-      - dokploy-network
-
-  guacamole-db:
-    image: postgres:15
-    container_name: guacamole-db
-    restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-guacamole}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-guacamole_password}
-      POSTGRES_DB: ${POSTGRES_DB:-guacamole_db}
-    volumes:
-      - guac_db_data:/var/lib/postgresql/data
-      - guac_db_init:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-guacamole} -d ${POSTGRES_DB:-guacamole_db}"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 40s
-    networks:
-      - dokploy-network
-
+  # ============================================================
+  # 1. INIT DB: Tự sinh file SQL ngay khi khởi động
+  # ============================================================
   guacamole-init:
-    image: guacamole/guacamole:latest
-    container_name: guacamole-init
-    user: root
-    restart: "no"
-    # SỬA TẠI ĐÂY: Chuyển sang dạng command string để tránh lỗi cú pháp shell
-    entrypoint: /bin/sh -c "mkdir -p /init && if [ ! -f /init/initdb.sql ]; then /opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql; echo '[init] SQL created'; else echo '[init] Exists'; fi"
+    image: guacamole/guacamole:1.6.0
+    container_name: guac_init_script
+    # Sử dụng command thay vì entrypoint để ổn định hơn trên Dokploy
+    command: >
+      sh -c "/opt/guacamole/bin/initdb.sh --postgres > /init/initdb.sql && 
+             echo 'SUCCESS: SQL file generated' &&
+             ls -l /init/initdb.sql"
     volumes:
-      - guac_db_init:/init
+      - guac_db_init_shared:/init
+    networks:
+      - dokploy-network
+
+  # ============================================================
+  # 2. DATABASE: Chờ Init xong mới chạy
+  # ============================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_guacamole
+    environment:
+      POSTGRES_DB: guacamole_db
+      POSTGRES_PASSWORD: 'YourSecurePassword123'
+      POSTGRES_USER: guacamole_user
+    volumes:
+      - guac_db_init_shared:/docker-entrypoint-initdb.d:ro
+      - guac_db_data:/var/lib/postgresql/data
+    depends_on:
+      guacamole-init:
+        condition: service_completed_successfully
+    networks:
+      - dokploy-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guacamole_user -d guacamole_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ============================================================
+  # 3. GUACD & WEB APP
+  # ============================================================
+  guacd:
+    image: guacamole/guacd:1.6.0
+    container_name: guacd_compose
+    restart: always
     networks:
       - dokploy-network
 
   guacamole:
-    image: guacamole/guacamole:latest
-    container_name: guacamole
+    image: guacamole/guacamole:1.6.0
+    container_name: guacamole_main
     restart: always
     depends_on:
-      guacamole-db:
+      postgres:
         condition: service_healthy
-      guacamole-init:
-        condition: service_completed_successfully
-      guacd:
-        condition: service_started
     environment:
-      GUACD_HOSTNAME: guacd
-      GUACD_PORT: "4822"
-      POSTGRESQL_HOSTNAME: guacamole-db
-      POSTGRESQL_PORT: "5432"
-      POSTGRESQL_DATABASE: ${POSTGRES_DB:-guacamole_db}
-      POSTGRESQL_USER: ${POSTGRES_USER:-guacamole}
-      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD:-guacamole_password}
-      POSTGRESQL_AUTO_CREATE_ACCOUNTS: "true"
-      WEBAPP_CONTEXT: ROOT
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.guacamole-app.rule=Host(`remote.matbaohosting.com`)"
-      - "traefik.http.routers.guacamole-app.entrypoints=websecure"
-      - "traefik.http.routers.guacamole-app.tls=true"
-      - "traefik.http.routers.guacamole-app.tls.certresolver=letsencrypt"
-      - "traefik.http.services.guacamole-app.loadbalancer.server.port=8080"
+      GUACD_HOSTNAME: guacd_compose
+      POSTGRESQL_DATABASE: guacamole_db
+      POSTGRESQL_HOSTNAME: postgres_guacamole
+      POSTGRESQL_PASSWORD: 'YourSecurePassword123'
+      POSTGRESQL_USER: guacamole_user
     networks:
       - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.guacamole.rule=Host(`remote.matbaohosting.com`)"
+      - "traefik.http.routers.guacamole.entrypoints=websecure"
+      - "traefik.http.routers.guacamole.tls=true"
+      - "traefik.http.routers.guacamole.tls.certresolver=letsencrypt"
+      - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
 
 networks:
   dokploy-network:
     external: true
 
 volumes:
-  guac_db_data:
-  guac_db_init:
+  guac_db_data:         # Nơi lưu data thực tế của Postgres
+  guac_db_init_shared:  # Volume trung gian để truyền file SQL
